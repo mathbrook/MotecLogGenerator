@@ -70,7 +70,7 @@ class DataLog(object):
                 continue
 
             db_msg = can_db.get_message_by_frame_id(id)
-            msg_decoded = can_db.decode_message(id, data)
+            msg_decoded = can_db.decode_message(id, data,decode_choices=False)
 
             for msg, signal in zip(msg_decoded.items(), db_msg.signals):
                 name = msg[0]
@@ -79,8 +79,11 @@ class DataLog(object):
                 if name in self.channels:
                     self.channels[name].messages.append(Message(stamp, value))
                 else:
-                    self.add_channel(name, signal.unit, float, 3, Message(stamp, value))
-
+                    try:
+                        self.add_channel(name, signal.unit, float, 3, Message(stamp, value))
+                    except TypeError as e:
+                        print(name)
+                        print(f'Error: {e}')
     def from_csv_log(self, log_lines):
         """ Creates channels populated with messages from a CSV log file.
 
