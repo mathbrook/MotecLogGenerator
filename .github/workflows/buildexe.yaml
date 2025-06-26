@@ -104,6 +104,7 @@ jobs:
           echo "- Uncompressed size: ${{ steps.archive.outputs.uncompressed_size }}" >> $GITHUB_STEP_SUMMARY
           echo "- Compressed artifact size: ${{ steps.archive.outputs.compressed_size }}" >> $GITHUB_STEP_SUMMARY
           echo "- Executable build time: ${{ steps.build_exe.outputs.build_time }} seconds" >> $GITHUB_STEP_SUMMARY
+        shell: bash # Holy shit i fucking hate windows
 
       - name: generate release notes
         id: release_notes
