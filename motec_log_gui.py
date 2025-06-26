@@ -68,15 +68,12 @@ class MotecLogGUI(tk.Tk):
             except Exception as e:
                 print(f"Error downloading icon: {e}, using default.")
         self.title("MoTeC Log Generator GUI")
-        self.configure(bg="#23272e")  # dark background
         self.resizable(False, True)
         self.last_dir = load_last_dir()
         self.vars = {}
         self.base_font = ("PMingLiU-ExtB", 14)
         self.entry_font = ("PMingLiU-ExtB", 14)
         self.button_font = ("PMingLiU-ExtB", 14, "bold")
-        self.fg_color = "#f5f6fa"
-        self.accent_color = "#23408e"  # dark blue
         self.pad = 20
         self.create_widgets()
         self.update_idletasks()
@@ -84,17 +81,19 @@ class MotecLogGUI(tk.Tk):
         self.geometry("")
 
     def create_widgets(self):
-        container = tk.Frame(self, bg="#23272e")
+        container = tk.Frame(self)
         container.pack(padx=self.pad, pady=self.pad, fill="both", expand=True)
         row = 0
         self.widget_refs = {}
         def add_label(text, width=None):
-            return tk.Label(container, text=text, font=self.base_font, fg=self.fg_color, bg="#23272e", width=width)
+            if width is not None:
+                return tk.Label(container, text=text, font=self.base_font, width=width)
+            else:
+                return tk.Label(container, text=text, font=self.base_font)
         def add_entry(var, width=50):
-            entry = tk.Entry(container, textvariable=var, width=width, font=self.entry_font, bg="#353a45", fg=self.fg_color, insertbackground=self.fg_color, relief=tk.FLAT, highlightthickness=1, highlightbackground="#444")
-            return entry
+            return tk.Entry(container, textvariable=var, width=width, font=self.entry_font)
         def add_button(text, cmd):
-            return tk.Button(container, text=text, command=cmd, font=self.button_font, bg=self.accent_color, fg="white", activebackground="#16244a", activeforeground="white", relief=tk.FLAT, bd=0, padx=10, pady=4)
+            return tk.Button(container, text=text, command=cmd, font=self.button_font)
         def add_tooltip(widget, text):
             tooltip = None
             after_id = None
@@ -105,7 +104,7 @@ class MotecLogGUI(tk.Tk):
                 tooltip = tk.Toplevel(self)
                 tooltip.withdraw()
                 tooltip.overrideredirect(True)
-                label = tk.Label(tooltip, text=text, bg="#444", fg="#fff", font=("PMingLiU-ExtB", 12), relief=tk.SOLID, borderwidth=1, padx=6, pady=2)
+                label = tk.Label(tooltip, text=text, font=("PMingLiU-ExtB", 12), relief=tk.SOLID, borderwidth=1, padx=6, pady=2)
                 label.pack()
                 x = event.widget.winfo_rootx() + 20
                 y = event.widget.winfo_rooty() + 30
@@ -130,8 +129,8 @@ class MotecLogGUI(tk.Tk):
         log_type_label.grid(row=row, column=0, sticky="e", pady=6, padx=6)
         self.vars["log_type"] = tk.StringVar(value=LOG_TYPES[0])
         log_type_menu = tk.OptionMenu(container, self.vars["log_type"], *LOG_TYPES, command=self.on_log_type_change)
-        log_type_menu.config(font=self.base_font, bg="#2c313a", fg=self.fg_color, activebackground="#353a45", activeforeground=self.fg_color, highlightthickness=0, relief=tk.FLAT)
-        log_type_menu['menu'].config(font=self.base_font, bg="#2c313a", fg=self.fg_color, activebackground="#353a45", activeforeground=self.fg_color)
+        log_type_menu.config(font=self.base_font)
+        log_type_menu['menu'].config(font=self.base_font)
         log_type_menu.grid(row=row, column=1, sticky="ew", pady=6, padx=6, columnspan=2)
         add_tooltip(log_type_menu, "Select the type of log file you want to convert.")
         row += 1
@@ -156,8 +155,8 @@ class MotecLogGUI(tk.Tk):
         add_tooltip(dbc_browse_btn, "Browse for a DBC file.")
         self.widget_refs['dbc_entry'] = dbc_entry
         self.widget_refs['dbc_browse_btn'] = dbc_browse_btn
-        # Set initial DBC entry color
-        dbc_entry.config(bg="#23272e", disabledbackground="#23272e", disabledforeground="#888")
+        # Set initial DBC entry state
+        dbc_entry.config(state="normal")
         row += 1
 
         add_label("Output File:").grid(row=row, column=0, sticky="e", pady=6, padx=6)
@@ -172,22 +171,22 @@ class MotecLogGUI(tk.Tk):
 
         add_label("Frequency (Hz):").grid(row=row, column=0, sticky="e", pady=6, padx=6)
         self.vars["frequency"] = tk.DoubleVar(value=20.0)
-        freq_entry = tk.Entry(container, textvariable=self.vars["frequency"], width=10, font=self.entry_font, bg="#2c313a", fg=self.fg_color, insertbackground=self.fg_color, relief=tk.FLAT, highlightthickness=1, highlightbackground="#444")
+        freq_entry = tk.Entry(container, textvariable=self.vars["frequency"], width=10, font=self.entry_font)
         freq_entry.grid(row=row, column=1, sticky="ew", pady=6, padx=6, columnspan=2)
         add_tooltip(freq_entry, "Sample frequency for output log.")
         row += 1
 
-        self.status = tk.Label(container, text="", fg="#7ecfff", bg="#23272e", font=("PMingLiU-ExtB", 12, "italic"))
+        self.status = tk.Label(container, text="", font=("PMingLiU-ExtB", 12, "italic"))
         self.status.grid(row=row, column=0, columnspan=3, sticky="ew", pady=8)
         row += 1
 
-        button_frame = tk.Frame(container, bg="#23272e")
+        button_frame = tk.Frame(container)
         button_frame.grid(row=row, column=0, columnspan=3, pady=10)
-        self.convert_btn = tk.Button(button_frame, text="Convert", command=self.run_conversion, font=self.button_font, bg=self.accent_color, fg="white", activebackground="#16244a", activeforeground="white", relief=tk.FLAT, bd=0, padx=16, pady=8)
+        self.convert_btn = tk.Button(button_frame, text="Convert", command=self.run_conversion, font=self.button_font)
         self.convert_btn.pack(side=tk.LEFT, padx=10)
-        self.open_btn = tk.Button(button_frame, text="Open", command=self.open_output_folder, state=tk.DISABLED, font=self.button_font, bg="#23408e", fg="#fff", activebackground="#16244a", activeforeground="#fff", relief=tk.FLAT, bd=0, padx=16, pady=8)
+        self.open_btn = tk.Button(button_frame, text="Open", command=self.open_output_folder, state=tk.DISABLED, font=self.button_font)
         self.open_btn.pack(side=tk.LEFT, padx=10)
-        metadata_btn = tk.Button(button_frame, text="Metadata...", command=self.open_metadata_dialog, font=self.button_font, bg=self.accent_color, fg="white", activebackground="#16244a", activeforeground="white", relief=tk.FLAT, bd=0, padx=16, pady=8)
+        metadata_btn = tk.Button(button_frame, text="Metadata...", command=self.open_metadata_dialog, font=self.button_font)
         metadata_btn.pack(side=tk.LEFT, padx=10)
         add_tooltip(self.convert_btn, "Convert the log file to MoTeC format.")
         add_tooltip(self.open_btn, "Open the output folder.")
@@ -206,10 +205,10 @@ class MotecLogGUI(tk.Tk):
         dbc_entry = self.widget_refs['dbc_entry']
         dbc_browse_btn = self.widget_refs['dbc_browse_btn']
         if value == "CAN":
-            dbc_entry.config(state="normal", bg="#353a45", disabledbackground="#23272e", disabledforeground="#888")
+            dbc_entry.config(state="normal")
             dbc_browse_btn.config(state="normal")
         else:
-            dbc_entry.config(state="disabled", bg="#23272e", disabledbackground="#23272e", disabledforeground="#888")
+            dbc_entry.config(state="disabled")
             dbc_browse_btn.config(state="disabled")
         self.vars["dbc"].set("")
 
@@ -327,27 +326,26 @@ class MotecLogGUI(tk.Tk):
     def open_metadata_dialog(self):
         meta_win = tk.Toplevel(self)
         meta_win.title("Edit Metadata")
-        meta_win.configure(bg="#23272e")
         meta_win.resizable(False, False)
         meta_win.transient(self)
         meta_win.grab_set()
         meta_win.focus_set()
-        meta_frame = tk.Frame(meta_win, bg="#23272e")
+        meta_frame = tk.Frame(meta_win)
         meta_frame.pack(padx=20, pady=20, fill="both", expand=True)
         row = 0
         entries = {}
         for label, varname, default, _ in METADATA_FIELDS:
-            l = tk.Label(meta_frame, text=label+":", font=self.base_font, fg=self.fg_color, bg="#23272e")
+            l = tk.Label(meta_frame, text=label+":", font=self.base_font)
             l.grid(row=row, column=0, sticky="e", pady=6, padx=6)
             if varname not in self.vars:
                 self.vars[varname] = tk.StringVar(value=str(default))
-            e = tk.Entry(meta_frame, textvariable=self.vars[varname], width=50, font=self.entry_font, bg="#353a45", fg=self.fg_color, insertbackground=self.fg_color, relief=tk.FLAT, highlightthickness=1, highlightbackground="#444")
+            e = tk.Entry(meta_frame, textvariable=self.vars[varname], width=50, font=self.entry_font)
             e.grid(row=row, column=1, sticky="ew", pady=6, padx=6)
             entries[varname] = e
             row += 1
         def close_meta():
             meta_win.destroy()
-        close_btn = tk.Button(meta_frame, text="Close", command=close_meta, font=self.button_font, bg=self.accent_color, fg="white", activebackground="#16244a", activeforeground="white", relief=tk.FLAT, bd=0, padx=16, pady=8)
+        close_btn = tk.Button(meta_frame, text="Close", command=close_meta, font=self.button_font)
         close_btn.grid(row=row, column=0, columnspan=2, pady=10)
 
 if __name__ == "__main__":
