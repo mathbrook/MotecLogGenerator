@@ -6,6 +6,15 @@ import sys
 import subprocess
 import threading
 import requests
+import logging
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 LAST_DIR_FILE = os.path.join(os.path.expanduser("~"), ".motec_log_gui_lastdir.json")
 ICON_DL_PATH = os.path.join(os.path.dirname(__file__), "icons", "squirrel.png")
@@ -15,7 +24,7 @@ LOG_TYPES = ["MCAP", "CSV", "ACCESSPORT", "CAN"]
 METADATA_FIELDS = [
     ("Driver", "driver", "", str),
     ("Vehicle ID", "vehicle_id", "", str),
-    ("Vehicle Weight", "vehicle_weight", 0, int),
+    ("Vehicle Weight", "vehicle_weight", "", str),
     ("Vehicle Type", "vehicle_type", "", str),
     ("Vehicle Comment", "vehicle_comment", "", str),
     ("Venue Name", "venue_name", "", str),
@@ -26,51 +35,69 @@ METADATA_FIELDS = [
 ]
 
 def load_last_dir():
+    logger.debug("Loading last directory from %s", LAST_DIR_FILE)
     if os.path.exists(LAST_DIR_FILE):
         try:
             with open(LAST_DIR_FILE, "r") as f:
-                return json.load(f).get("last_dir", os.path.expanduser("~"))
-        except Exception:
+                last_dir = json.load(f).get("last_dir", os.path.expanduser("~"))
+                logger.info("Loaded last directory: %s", last_dir)
+                return last_dir
+        except Exception as e:
+            logger.warning("Failed to load last directory: %s", e)
             return os.path.expanduser("~")
+    logger.info("No last directory file found, using home directory")
     return os.path.expanduser("~")
 
 def save_last_dir(path):
     d = os.path.dirname(path) if os.path.isfile(path) else path
-    with open(LAST_DIR_FILE, "w") as f:
-        json.dump({"last_dir": d}, f)
+    try:
+        with open(LAST_DIR_FILE, "w") as f:
+            json.dump({"last_dir": d}, f)
+        logger.info("Saved last directory: %s", d)
+    except Exception as e:
+        logger.warning("Failed to save last directory: %s", e)
 
 def get_default_output(log_path):
     if not log_path:
+        logger.debug("No log path provided for default output")
         return ""
     candump_dir, candump_filename = os.path.split(log_path)
     candump_filename = os.path.splitext(candump_filename)[0]
-    return os.path.join(candump_dir, candump_filename + ".ld")
+    output_path = os.path.join(candump_dir, candump_filename + ".ld")
+    logger.debug("Default output path computed: %s", output_path)
+    return output_path
 
 class MotecLogGUI(tk.Tk):
     def __init__(self):
+        logger.info("Initializing MotecLogGUI")
         super().__init__()
         try:
             os.makedirs(os.path.dirname(ICON_DL_PATH), exist_ok=True)
             icon = tk.PhotoImage(file=ICON_DL_PATH)
             self.iconphoto(True, icon)
+            logger.info("Loaded icon from %s", ICON_DL_PATH)
         except Exception as e:
-            print(f"Error loading icon: {e}")
-            # Try to download the icon from github lmao
+            logger.warning("Error loading icon: %s", e)
+            # Try to download the icon from github
             try:
+                logger.info("Attempting to download icon from GitHub...")
                 response = requests.get("https://raw.githubusercontent.com/mathbrook/MotecLogGenerator/refs/heads/master/icons/squirrel.png", timeout=3)
                 if response.status_code == 200:
                     with open(ICON_DL_PATH, "wb") as f:
                         f.write(response.content)
                     icon = tk.PhotoImage(file=ICON_DL_PATH)
                     self.iconphoto(True, icon)
+                    logger.info("Downloaded and loaded icon from GitHub")
                 else:
-                    print("Failed to download icon, using default.")
+                    logger.warning("Failed to download icon, status code: %s", response.status_code)
             except Exception as e:
-                print(f"Error downloading icon: {e}, using default.")
+                logger.error("Error downloading icon: %s, using default.", e)
         self.title("MoTeC Log Generator GUI")
         self.resizable(False, True)
         self.last_dir = load_last_dir()
         self.vars = {}
+        for displayname, varname, default, typ in METADATA_FIELDS:
+            self.vars[varname] = tk.StringVar(value=str(default) if default is not None else "")
         self.base_font = ("PMingLiU-ExtB", 14)
         self.entry_font = ("PMingLiU-ExtB", 14)
         self.button_font = ("PMingLiU-ExtB", 14, "bold")
@@ -79,20 +106,25 @@ class MotecLogGUI(tk.Tk):
         self.update_idletasks()
         self.minsize(self.winfo_reqwidth(), self.winfo_reqheight())
         self.geometry("")
+        logger.info("GUI initialized")
 
     def create_widgets(self):
+        logger.debug("Creating widgets")
         container = tk.Frame(self)
         container.pack(padx=self.pad, pady=self.pad, fill="both", expand=True)
         row = 0
         self.widget_refs = {}
         def add_label(text, width=None):
+            logger.debug("Adding label: %s", text)
             if width is not None:
                 return tk.Label(container, text=text, font=self.base_font, width=width)
             else:
                 return tk.Label(container, text=text, font=self.base_font)
         def add_entry(var, width=50):
+            logger.debug("Adding entry")
             return tk.Entry(container, textvariable=var, width=width, font=self.entry_font)
         def add_button(text, cmd):
+            logger.debug("Adding button: %s", text)
             return tk.Button(container, text=text, command=cmd, font=self.button_font)
         def add_tooltip(widget, text):
             tooltip = None
@@ -201,6 +233,7 @@ class MotecLogGUI(tk.Tk):
         self.update_convert_button_state()
 
     def on_log_type_change(self, value):
+        logger.info("Log type changed to: %s", value)
         # Enable/disable DBC entry and browse button based on log type
         dbc_entry = self.widget_refs['dbc_entry']
         dbc_browse_btn = self.widget_refs['dbc_browse_btn']
@@ -213,12 +246,14 @@ class MotecLogGUI(tk.Tk):
         self.vars["dbc"].set("")
 
     def on_log_path_change(self, *args):
+        logger.debug("Log path changed: %s", self.vars["log"].get())
         log_path = self.vars["log"].get()
         if log_path:
             self.vars["output"].set(get_default_output(log_path))
         self.update_convert_button_state()
 
     def update_convert_button_state(self):
+        logger.debug("Updating convert button state")
         log_path = self.vars["log"].get()
         if hasattr(self, 'convert_btn'):
             if log_path:
@@ -227,6 +262,7 @@ class MotecLogGUI(tk.Tk):
                 self.convert_btn.config(state=tk.DISABLED)
 
     def browse_log(self):
+        logger.info("Browsing for log file")
         path = filedialog.askopenfilename(
             initialdir=self.last_dir,
             title="Select Log File",
@@ -239,26 +275,32 @@ class MotecLogGUI(tk.Tk):
             ]
         )
         if path:
+            logger.info("Selected log file: %s", path)
             self.vars["log"].set(path)
             self.last_dir = os.path.dirname(path)
             save_last_dir(self.last_dir)
 
     def browse_dbc(self):
+        logger.info("Browsing for DBC file")
         path = filedialog.askopenfilename(initialdir=self.last_dir, title="Select DBC File", filetypes=[("DBC Files", "*.dbc"), ("All Files", "*.*")])
         if path:
+            logger.info("Selected DBC file: %s", path)
             self.vars["dbc"].set(path)
             self.last_dir = os.path.dirname(path)
             save_last_dir(self.last_dir)
 
     def browse_output(self):
+        logger.info("Browsing for output file")
         path = filedialog.asksaveasfilename(initialdir=self.last_dir, title="Select Output File", defaultextension=".ld", filetypes=[("MoTeC LD Files", "*.ld"), ("All Files", "*.*")])
         if path:
+            logger.info("Selected output file: %s", path)
             self.vars["output"].set(path)
             self.last_dir = os.path.dirname(path)
             save_last_dir(self.last_dir)
 
     def open_output_folder(self):
         output_path = self.vars["output"].get()
+        logger.info("Opening output folder for: %s", output_path)
         if output_path:
             folder = os.path.dirname(output_path)
             if not folder:
@@ -271,7 +313,9 @@ class MotecLogGUI(tk.Tk):
                 subprocess.Popen(['xdg-open', folder])
 
     def run_conversion(self):
+        logger.info("Starting conversion thread")
         def do_conversion():
+            logger.info("Running conversion subprocess")
             args = [sys.executable, os.path.join(os.path.dirname(__file__), "motec_log_generator.py")]
             args += [self.vars["log"].get(), self.vars["log_type"].get()]
             if self.vars["output"].get():
@@ -279,21 +323,34 @@ class MotecLogGUI(tk.Tk):
             args += ["--frequency", str(self.vars["frequency"].get())]
             if self.vars["log_type"].get() == "CAN":
                 if not self.vars["dbc"].get():
+                    logger.error("DBC file is required for CAN logs.")
                     self.after(0, lambda: messagebox.showerror("Error", "DBC file is required for CAN logs."))
                     self.after(0, lambda: self.unlock_buttons())
                     return
                 args += ["--dbc", self.vars["dbc"].get()]
-            for _, varname, _, typ in METADATA_FIELDS:
-                val = self.vars[varname].get()
-                if typ == int:
-                    try:
-                        val = int(val)
-                    except Exception:
-                        val = 0
-                if val != "" and val != 0:
-                    args += [f"--{varname}", str(val)]
+            try:
+                for _, varname, _, typ in METADATA_FIELDS:
+                    val = self.vars[varname].get()
+                    if typ == int:
+                        try:
+                            val = int(val)
+                        except Exception:
+                            logger.warning("Could not convert %s to int, defaulting to 0", varname)
+                            val = 0
+                    if val != "" and val != 0:
+                        newarg = [f"--{varname}", str(val)]
+                        logger.debug("Adding metadata argument: %s", newarg)
+                        args += newarg
+            except Exception as e:
+                logger.error("Error processing metadata: %s", e)
+            logger.info("Subprocess args: %s", args)
             try:
                 result = subprocess.run(args, capture_output=True, text=True)
+                logger.info("Subprocess finished with return code %s", result.returncode)
+                if result.stdout:
+                    logger.info("Subprocess stdout: %s", result.stdout)
+                if result.stderr:
+                    logger.warning("Subprocess stderr: %s", result.stderr)
                 if result.returncode == 0:
                     self.after(0, lambda: self.status.config(text="Done! Output: " + self.vars["output"].get(), fg="green"))
                     self.after(0, lambda: messagebox.showinfo("Success", "Conversion complete!\nOutput: " + self.vars["output"].get()))
@@ -302,6 +359,7 @@ class MotecLogGUI(tk.Tk):
                     self.after(0, lambda: self.status.config(text="Error: " + result.stderr, fg="red"))
                     self.after(0, lambda: messagebox.showerror("Error", result.stderr))
             except Exception as e:
+                logger.error("Exception running subprocess: %s", e)
                 self.after(0, lambda: self.status.config(text="Error: " + str(e), fg="red"))
                 self.after(0, lambda: messagebox.showerror("Error", str(e)))
             self.after(0, lambda: self.unlock_buttons())
@@ -310,13 +368,16 @@ class MotecLogGUI(tk.Tk):
         self.update()
         self.lock_buttons()
         threading.Thread(target=do_conversion, daemon=True).start()
+        logger.info("Conversion thread started")
 
     def lock_buttons(self):
+        logger.debug("Locking buttons")
         self.convert_btn.config(state=tk.DISABLED)
         self.open_btn.config(state=tk.DISABLED)
         self.widget_refs['dbc_browse_btn'].config(state=tk.DISABLED)
 
     def unlock_buttons(self):
+        logger.debug("Unlocking buttons")
         self.convert_btn.config(state=tk.NORMAL)
         if self.vars["log_type"].get() == "CAN":
             self.widget_refs['dbc_browse_btn'].config(state=tk.NORMAL)
@@ -324,6 +385,7 @@ class MotecLogGUI(tk.Tk):
             self.widget_refs['dbc_browse_btn'].config(state=tk.DISABLED)
 
     def open_metadata_dialog(self):
+        logger.info("Opening metadata dialog")
         meta_win = tk.Toplevel(self)
         meta_win.title("Edit Metadata")
         meta_win.resizable(False, False)
@@ -349,4 +411,5 @@ class MotecLogGUI(tk.Tk):
         close_btn.grid(row=row, column=0, columnspan=2, pady=10)
 
 if __name__ == "__main__":
+    logger.info("Starting mainloop")
     MotecLogGUI().mainloop()
