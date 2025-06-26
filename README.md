@@ -1,3 +1,48 @@
+
+## Downloading and Running the MoTeC Log Generator GUI
+
+To use the pre-built MoTeC Log Generator GUI on your platform:
+
+1. **Go to the [GitHub Releases](https://github.com/mathbrook/MotecLogGenerator/releases) tab.**
+   - You will see a list of releases. Each release contains compressed archives for different platforms (Windows, Linux, ARM Linux, etc.).
+
+2. **Download the appropriate archive for your platform:**
+   - For Windows: `motec_log_gui-windows.zip`
+   - For Linux (x86_64): `motec_log_gui-linux.tar.gz`
+   - For ARM Linux (e.g., Raspberry Pi): `motec_log_gui-arm-linux.tar.gz`
+
+3. **Extract the archive:**
+   - **Windows:**
+     - Right-click the `.zip` file and select "Extract All..."
+     - Or use a tool like 7-Zip or WinRAR.
+   - **Linux:**
+     - Use your file manager or run:
+       ```sh
+       tar -xzf motec_log_gui-linux.tar.gz
+       # or for ARM:
+       tar -xzf motec_log_gui-arm-linux.tar.gz
+       ```
+
+4. **Run the application:**
+   - **Windows:**
+     - Double-click the `motec_log_gui.exe` file in the extracted folder.
+   - **Linux:**
+     - Open a terminal in the extracted folder and run:
+       ```sh
+       ./motec_log_gui.bin
+       ```
+     - If you get a permission error, run:
+       ```sh
+       chmod +x motec_log_gui.bin
+       ./motec_log_gui.bin
+       ```
+   - **ARM Linux:**
+     - Same as above, but use the ARM binary.
+
+5. **No installation is required.** The GUI should open and be ready to use.
+
+If you encounter any issues, please check the [Issues](https://github.com/mathbrook/MotecLogGenerator/issues) page or see the troubleshooting section below.
+
 # MotecLogGenerator
 
 Utility for generating MoTeC .ld files that can be analyzed with [i2 Pro](https://www.motec.com.au/i2/i2overview/) from external log sources. Generated log files are "Pro Enabled", so they can be opened in either *i2 Standard* or *i2 Pro*.
