@@ -16,23 +16,23 @@ jobs:
           - os: windows-latest
             artifact_name: motec_log_gui-windows
             nuitka_py: .\\motec_log_gui.py
-            shell: pwsh
+
           - os: windows-11-arm
             artifact_name: motec_log_gui-arm-windows
             nuitka_py: .\\motec_log_gui.py
-            shell: pwsh
+
           - os: ubuntu-latest
             artifact_name: motec_log_gui-linux
             nuitka_py: ./motec_log_gui.py
-            shell: bash
+
           - os: macos-latest
             artifact_name: motec_log_gui-macos
             nuitka_py: ./motec_log_gui.py
-            shell: bash
+
           - os: ubuntu-24.04-arm
             artifact_name: motec_log_gui-arm-linux
             nuitka_py: ./motec_log_gui.py
-            shell: bash
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -44,12 +44,10 @@ jobs:
 
       - name: Sync dependencies with uv
         run: uv sync
-        shell: ${{ matrix.shell }}
 
       - name: Build standalone executable with Nuitka
         run: |
           uv run python -m nuitka --standalone ${{ matrix.nuitka_py }} --enable-plugin=tk-inter
-        shell: ${{ matrix.shell }}
 
       - name: Generate Release Notes
         id: release_notes
@@ -58,7 +56,6 @@ jobs:
           echo >> RELEASE_NOTES.md
           echo '## Changes since last release:' >> RELEASE_NOTES.md
           git log --pretty=format:'- %s (%an)' $(git describe --tags --abbrev=0 $(git rev-list --tags --skip=1 --max-count=1))..HEAD >> RELEASE_NOTES.md
-        shell: ${{ matrix.shell }}
 
       - name: Upload Nuitka dist as artifact
         uses: actions/upload-artifact@v4
