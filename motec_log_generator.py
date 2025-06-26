@@ -27,7 +27,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=DESCRIPTION, epilog=EPILOG)
     parser.add_argument("log", type=str, help="Path to logfile")
     parser.add_argument("log_type", type=str, help="Type of log to process", \
-        choices=["CAN", "CSV", "ACCESSPORT"])
+        choices=["CAN", "CSV", "ACCESSPORT", "MCAP"])
 
     parser.add_argument("--output", type=str, \
         help="Name of output file, defaults to the same filename as 'log'")
@@ -63,30 +63,37 @@ if __name__ == '__main__':
         print("ERROR: DBC file %s does not exist" % args.dbc)
         exit(1)
 
-    print("Loading log...")
-    with open(args.log, "r") as file:
-        lines = file.readlines()
-
-    # Create our data log from the input data
     data_log = DataLog()
 
-    if args.log_type == "CAN":
-        if not os.path.isfile(args.dbc):
-            print("ERROR: DBC file %s does not exist" % args.dbc)
-            exit(1)
+    # If its mcap just load it and rip cuz we can
+    if args.log_type == "MCAP":
+        print("Extracting data from MCAP log...")
+        data_log.from_mcap_log(args.log)
+    else:
+        # if its a lame format we gotta read the lines right here
+        print("Loading log...")
+        with open(args.log, "r") as file:
+            lines = file.readlines()
 
-        # Load the databse and log file
-        print("Loading DBC...")
-        can_db = cantools.database.load_file(args.dbc)
+        # Create our data log from the input data
 
-        print("Extracting data...")
-        data_log.from_can_log(lines, can_db)
-    elif args.log_type == "CSV":
-        print("Extracting data...")
-        data_log.from_csv_log(lines)
-    elif args.log_type == "ACCESSPORT":
-        print("Extracting data...")
-        data_log.from_accessport_log(lines)
+        if args.log_type == "CAN":
+            if not os.path.isfile(args.dbc):
+                print("ERROR: DBC file %s does not exist" % args.dbc)
+                exit(1)
+
+            # Load the databse and log file
+            print("Loading DBC...")
+            can_db = cantools.db.load_file(args.dbc)
+
+            print("Extracting data...")
+            data_log.from_can_log(lines, can_db)
+        elif args.log_type == "CSV":
+            print("Extracting data...")
+            data_log.from_csv_log(lines)
+        elif args.log_type == "ACCESSPORT":
+            print("Extracting data...")
+            data_log.from_accessport_log(lines)
 
     if not data_log.channels:
         print("ERROR: Failed to find any channels in log data")

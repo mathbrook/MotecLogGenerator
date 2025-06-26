@@ -1,11 +1,14 @@
 import cantools
+import mcap
 import math
-
+from typing import Dict
+from mcap.reader import make_reader
+from mcap_protobuf.decoder import DecoderFactory
 class DataLog(object):
     """ Container for storing log data which contains a set of channels with time series data."""
     def __init__(self, name=""):
         self.name = name
-        self.channels = {}
+        self.channels: Dict[str, Channel] = {}
 
     def clear(self):
         self.channels = {}
@@ -13,6 +16,18 @@ class DataLog(object):
     def add_channel(self, name, units, data_type, decimals, initial_message=None):
         msg = [] if not initial_message else [initial_message]
         self.channels[name] = Channel(name, units, data_type, decimals, msg)
+
+    def add_message(self, channel_name, timestamp, value):
+        """ Adds a message to the specified channel.
+
+        channel_name: Name of the channel to add the message to
+        timestamp: Timestamp of the message [s]
+        value: Value of the message
+        """
+        if channel_name not in self.channels:
+            raise KeyError(f"Channel '{channel_name}' does not exist in log")
+
+        self.channels[channel_name].messages.append(Message(timestamp, value))
 
     def start(self):
         """ Returns the earliest timestamp from all existing channels [s]. """
@@ -84,6 +99,7 @@ class DataLog(object):
                     except TypeError as e:
                         print(name)
                         print(f'Error: {e}')
+
     def from_csv_log(self, log_lines):
         """ Creates channels populated with messages from a CSV log file.
 
@@ -142,6 +158,56 @@ class DataLog(object):
                 del channel_dict[name]
                 del self.channels[name]
 
+    def from_mcap_log(self, mcap_path):
+        """ Creates channels populated with messages from an MCAP log file.
+
+        This will create a channel for each topic in the MCAP file, with the name and units of that
+        channel taken from the topic metadata. Any non numeric data will be ignored, and that channel
+        will be removed.
+
+        mcap_file: Path to the MCAP log file
+        """
+
+        self.clear()
+        with open(mcap_path, "rb") as mcap_file:
+            reader = make_reader(mcap_file, decoder_factories=[DecoderFactory()])
+            for schema, channel, message, proto_msg in reader.iter_decoded_messages():
+                # Divide timestamp by whatever is needed to convert it to seconds
+                timestamp = message.log_time / 1e9  # Convert nanoseconds to seconds
+                if hasattr(proto_msg, 'ListFields'):
+                    for field_desc, value in proto_msg.ListFields():
+                        # Handle repeated fields (lists)
+                        if isinstance(value, (list, tuple)) and not isinstance(value, bytes):
+                            for idx, v in enumerate(value):
+                                signal_name = f"{field_desc.name}[{idx}]"
+                                # timestamp = message.log_time
+                                value = v
+                                if signal_name not in self.channels:
+                                    self.add_channel(name = signal_name, units = "", data_type = float, decimals = 3)
+                                self.channels[signal_name].add_message(timestamp = timestamp, value = value)
+                                # print([channel.topic, message.log_time, f"{field_desc.name}[{idx}]", v])
+                        elif isinstance(value, (int, float)):
+                            # print("lmao YEET")
+                            signal_name = f"{field_desc.name}"
+                            # timestamp = message.log_time
+                            value = value
+                            if signal_name not in self.channels:
+                                self.add_channel(name = signal_name, units = "", data_type = float, decimals = 3)
+                            self.channels[signal_name].add_message(timestamp = timestamp, value = value)
+                            # print([channel.topic, message.log_time, field_desc.name, value])
+                else:
+                    # Fallback: treat as before
+                    if isinstance(proto_msg, dict):
+                        for k, v in proto_msg.items():
+                            print(f"msg: {k}, value: {v}")
+                    elif isinstance(proto_msg, (list, tuple)):
+                        for idx, v in enumerate(proto_msg):
+                            print(f"msg[{idx}]: {v}")
+                    elif isinstance(proto_msg, bytes):
+                        print(f"msg: {proto_msg.hex()}")
+                    else:
+                        print(f"msg: {proto_msg}")
+
     def from_accessport_log(self, log_lines):
         """ Creates channels populated with messages from a COBB Accessport CSV log file.
 
@@ -196,10 +262,17 @@ class Channel(object):
         self.units = str(units)
         self.data_type = data_type
         self.decimals = decimals
+        self.messages = []
         if messages:
             self.messages = messages
-        else:
-            self.messages = []
+            
+    def add_message(self, timestamp, value):
+        """ Adds a message to the channel.
+
+        timestamp: Timestamp of the message [s]
+        value: Value of the message
+        """
+        self.messages.append(Message(timestamp, value))
 
     def start(self):
         if self.messages:
@@ -269,7 +342,7 @@ class Channel(object):
 
 class Message(object):
     """ A single message in a time series of data. """
-    def __init__(self, timestamp=0, value=0):
+    def __init__(self, timestamp: int | float = 0, value=0):
         self.timestamp = float(timestamp)
         self.value = float(value)
 
