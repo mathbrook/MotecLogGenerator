@@ -113,6 +113,7 @@ jobs:
           echo >> RELEASE_NOTES.md
           echo '## Changes since last release:' >> RELEASE_NOTES.md
           git log --pretty=format:'- %s (%an)' $(git describe --tags --abbrev=0 $(git rev-list --tags --skip=1 --max-count=1))..HEAD >> RELEASE_NOTES.md
+        shell: bash # Holy shit i fucking hate windows
 
       - name: upload artifact
         uses: actions/upload-artifact@v4
