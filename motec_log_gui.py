@@ -7,7 +7,8 @@ import subprocess
 import threading
 import requests
 import logging
-
+from pathlib import Path
+from motec_log_generator import generate_motec_log
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
@@ -16,15 +17,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-LAST_DIR_FILE = os.path.join(os.path.expanduser("~"), ".motec_log_gui_lastdir.json")
-ICON_DL_PATH = os.path.join(os.path.dirname(__file__), "icons", "squirrel.png")
+HOME = Path.home()
+LAST_DIR_FILE = HOME / ".motec_log_gui_lastdir.json"
+ICON_DL_PATH = Path(__file__).resolve().parent / "icons" / "squirrel.png"
 LOG_TYPES = ["MCAP", "CSV", "ACCESSPORT", "CAN"]
 
 # Metadata fields: (label, variable name, default, type)
 METADATA_FIELDS = [
     ("Driver", "driver", "", str),
     ("Vehicle ID", "vehicle_id", "", str),
-    ("Vehicle Weight", "vehicle_weight", "", str),
+    ("Vehicle Weight", "vehicle_weight", "", int),
     ("Vehicle Type", "vehicle_type", "", str),
     ("Vehicle Comment", "vehicle_comment", "", str),
     ("Venue Name", "venue_name", "", str),
@@ -36,22 +38,23 @@ METADATA_FIELDS = [
 
 def load_last_dir():
     logger.debug("Loading last directory from %s", LAST_DIR_FILE)
-    if os.path.exists(LAST_DIR_FILE):
+    if LAST_DIR_FILE.exists():
         try:
-            with open(LAST_DIR_FILE, "r") as f:
-                last_dir = json.load(f).get("last_dir", os.path.expanduser("~"))
+            with LAST_DIR_FILE.open("r") as f:
+                last_dir = json.load(f).get("last_dir", str(HOME))
                 logger.info("Loaded last directory: %s", last_dir)
-                return last_dir
+                return str(Path(last_dir).expanduser().resolve())
         except Exception as e:
             logger.warning("Failed to load last directory: %s", e)
-            return os.path.expanduser("~")
+            return str(HOME)
     logger.info("No last directory file found, using home directory")
-    return os.path.expanduser("~")
+    return str(HOME)
 
 def save_last_dir(path):
-    d = os.path.dirname(path) if os.path.isfile(path) else path
+    p = Path(path).expanduser().resolve()
+    d = str(p.parent if p.is_file() or p.suffix else p)
     try:
-        with open(LAST_DIR_FILE, "w") as f:
+        with LAST_DIR_FILE.open("w") as f:
             json.dump({"last_dir": d}, f)
         logger.info("Saved last directory: %s", d)
     except Exception as e:
@@ -61,19 +64,20 @@ def get_default_output(log_path):
     if not log_path:
         logger.debug("No log path provided for default output")
         return ""
-    candump_dir, candump_filename = os.path.split(log_path)
-    candump_filename = os.path.splitext(candump_filename)[0]
-    output_path = os.path.join(candump_dir, candump_filename + ".ld")
+    log_path = Path(log_path).expanduser().resolve()
+    candump_dir = log_path.parent
+    candump_filename = log_path.stem
+    output_path = candump_dir / f"{candump_filename}.ld"
     logger.debug("Default output path computed: %s", output_path)
-    return output_path
+    return str(output_path)
 
 class MotecLogGUI(tk.Tk):
     def __init__(self):
         logger.info("Initializing MotecLogGUI")
         super().__init__()
         try:
-            os.makedirs(os.path.dirname(ICON_DL_PATH), exist_ok=True)
-            icon = tk.PhotoImage(file=ICON_DL_PATH)
+            ICON_DL_PATH.parent.mkdir(parents=True, exist_ok=True)
+            icon = tk.PhotoImage(file=str(ICON_DL_PATH))
             self.iconphoto(True, icon)
             logger.info("Loaded icon from %s", ICON_DL_PATH)
         except Exception as e:
@@ -83,9 +87,9 @@ class MotecLogGUI(tk.Tk):
                 logger.info("Attempting to download icon from GitHub...")
                 response = requests.get("https://raw.githubusercontent.com/mathbrook/MotecLogGenerator/refs/heads/master/icons/squirrel.png", timeout=3)
                 if response.status_code == 200:
-                    with open(ICON_DL_PATH, "wb") as f:
+                    with ICON_DL_PATH.open("wb") as f:
                         f.write(response.content)
-                    icon = tk.PhotoImage(file=ICON_DL_PATH)
+                    icon = tk.PhotoImage(file=str(ICON_DL_PATH))
                     self.iconphoto(True, icon)
                     logger.info("Downloaded and loaded icon from GitHub")
                 else:
@@ -276,8 +280,9 @@ class MotecLogGUI(tk.Tk):
         )
         if path:
             logger.info("Selected log file: %s", path)
-            self.vars["log"].set(path)
-            self.last_dir = os.path.dirname(path)
+            norm_path = str(Path(path).expanduser().resolve())
+            self.vars["log"].set(norm_path)
+            self.last_dir = str(Path(norm_path).parent)
             save_last_dir(self.last_dir)
 
     def browse_dbc(self):
@@ -285,8 +290,9 @@ class MotecLogGUI(tk.Tk):
         path = filedialog.askopenfilename(initialdir=self.last_dir, title="Select DBC File", filetypes=[("DBC Files", "*.dbc"), ("All Files", "*.*")])
         if path:
             logger.info("Selected DBC file: %s", path)
-            self.vars["dbc"].set(path)
-            self.last_dir = os.path.dirname(path)
+            norm_path = str(Path(path).expanduser().resolve())
+            self.vars["dbc"].set(norm_path)
+            self.last_dir = str(Path(norm_path).parent)
             save_last_dir(self.last_dir)
 
     def browse_output(self):
@@ -294,17 +300,18 @@ class MotecLogGUI(tk.Tk):
         path = filedialog.asksaveasfilename(initialdir=self.last_dir, title="Select Output File", defaultextension=".ld", filetypes=[("MoTeC LD Files", "*.ld"), ("All Files", "*.*")])
         if path:
             logger.info("Selected output file: %s", path)
-            self.vars["output"].set(path)
-            self.last_dir = os.path.dirname(path)
+            norm_path = str(Path(path).expanduser().resolve())
+            self.vars["output"].set(norm_path)
+            self.last_dir = str(Path(norm_path).parent)
             save_last_dir(self.last_dir)
 
     def open_output_folder(self):
         output_path = self.vars["output"].get()
         logger.info("Opening output folder for: %s", output_path)
         if output_path:
-            folder = os.path.dirname(output_path)
+            folder = str(Path(output_path).expanduser().resolve().parent)
             if not folder:
-                folder = os.getcwd()
+                folder = str(Path.cwd())
             if sys.platform.startswith('win'):
                 os.startfile(folder)
             elif sys.platform.startswith('darwin'):
@@ -313,62 +320,48 @@ class MotecLogGUI(tk.Tk):
                 subprocess.Popen(['xdg-open', folder])
 
     def run_conversion(self):
-        logger.info("Starting conversion thread")
+        logger.info("Starting non-blocking conversion")
         def do_conversion():
-            logger.info("Running conversion subprocess")
-            args = [sys.executable, os.path.join(os.path.dirname(__file__), "motec_log_generator.py")]
-            args += [self.vars["log"].get(), self.vars["log_type"].get()]
-            if self.vars["output"].get():
-                args += ["--output", self.vars["output"].get()]
-            args += ["--frequency", str(self.vars["frequency"].get())]
-            if self.vars["log_type"].get() == "CAN":
-                if not self.vars["dbc"].get():
-                    logger.error("DBC file is required for CAN logs.")
-                    self.after(0, lambda: messagebox.showerror("Error", "DBC file is required for CAN logs."))
-                    self.after(0, lambda: self.unlock_buttons())
-                    return
-                args += ["--dbc", self.vars["dbc"].get()]
+            self.status.config(text="Running conversion...")
+            self.lock_buttons()
             try:
-                for _, varname, _, typ in METADATA_FIELDS:
-                    val = self.vars[varname].get()
+                # Build kwargs for generate_motec_log from self.vars
+                kwargs = {k: v.get() for k, v in self.vars.items()}
+                # Convert types for known int/float fields
+                for label, varname, default, typ in METADATA_FIELDS:
                     if typ == int:
                         try:
-                            val = int(val)
+                            kwargs[varname] = int(kwargs[varname]) if kwargs[varname] not in (None, "") else 0
                         except Exception:
                             logger.warning("Could not convert %s to int, defaulting to 0", varname)
-                            val = 0
-                    if val != "" and val != 0:
-                        newarg = [f"--{varname}", str(val)]
-                        logger.debug("Adding metadata argument: %s", newarg)
-                        args += newarg
+                            kwargs[varname] = 0
+                    elif typ == float:
+                        try:
+                            kwargs[varname] = float(kwargs[varname]) if kwargs[varname] not in (None, "") else 0.0
+                        except Exception:
+                            logger.warning("Could not convert %s to float, defaulting to 0.0", varname)
+                            kwargs[varname] = 0.0
+                # Handle frequency (always float)
+                try:
+                    kwargs["frequency"] = float(self.vars["frequency"].get()) if self.vars["frequency"].get() not in (None, "") else 20.0
+                except Exception:
+                    kwargs["frequency"] = 20.0
+                # Ensure required args are present
+                kwargs["log"] = self.vars["log"].get()
+                kwargs["log_type"] = self.vars["log_type"].get()
+                kwargs["output"] = self.vars["output"].get()
+                kwargs["dbc"] = self.vars["dbc"].get()
+                logger.info(f"Calling motec_log_generator.generate_motec_log with kwargs: {kwargs}")
+                result = generate_motec_log(**kwargs)
+                self.status.config(text="Done! Output: " + self.vars["output"].get(), fg="green")
+                messagebox.showinfo("Success", "Conversion complete!\nOutput: " + self.vars["output"].get())
+                self.open_btn.config(state=tk.NORMAL)
             except Exception as e:
-                logger.error("Error processing metadata: %s", e)
-            logger.info("Subprocess args: %s", args)
-            try:
-                result = subprocess.run(args, capture_output=True, text=True)
-                logger.info("Subprocess finished with return code %s", result.returncode)
-                if result.stdout:
-                    logger.info("Subprocess stdout: %s", result.stdout)
-                if result.stderr:
-                    logger.warning("Subprocess stderr: %s", result.stderr)
-                if result.returncode == 0:
-                    self.after(0, lambda: self.status.config(text="Done! Output: " + self.vars["output"].get(), fg="green"))
-                    self.after(0, lambda: messagebox.showinfo("Success", "Conversion complete!\nOutput: " + self.vars["output"].get()))
-                    self.after(0, lambda: self.open_btn.config(state=tk.NORMAL))
-                else:
-                    self.after(0, lambda: self.status.config(text="Error: " + result.stderr, fg="red"))
-                    self.after(0, lambda: messagebox.showerror("Error", result.stderr))
-            except Exception as e:
-                logger.error("Exception running subprocess: %s", e)
-                self.after(0, lambda: self.status.config(text="Error: " + str(e), fg="red"))
-                self.after(0, lambda: messagebox.showerror("Error", str(e)))
-            self.after(0, lambda: self.unlock_buttons())
-
-        self.status.config(text="Running conversion...")
-        self.update()
-        self.lock_buttons()
+                logger.error("Exception running conversion: %s", e)
+                self.status.config(text="Error: " + str(e), fg="red")
+                messagebox.showerror("Error", str(e))
+            self.unlock_buttons()
         threading.Thread(target=do_conversion, daemon=True).start()
-        logger.info("Conversion thread started")
 
     def lock_buttons(self):
         logger.debug("Locking buttons")

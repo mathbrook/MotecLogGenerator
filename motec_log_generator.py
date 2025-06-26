@@ -23,18 +23,112 @@ MoTeC channel will be created for every channel logged, the name and units will 
 over.
 """
 
-if __name__ == '__main__':
+def generate_motec_log(
+    log,
+    log_type,
+    output=None,
+    frequency=20.0,
+    dbc=None,
+    driver="",
+    vehicle_id="",
+    vehicle_weight=0,
+    vehicle_type="",
+    vehicle_comment="",
+    venue_name="",
+    event_name="",
+    event_session="",
+    long_comment="",
+    short_comment=""
+):
+    log = os.path.expanduser(log)
+    if dbc:
+        dbc = os.path.expanduser(dbc)
+    if output:
+        output = os.path.expanduser(output)
+
+    # Make sure our input files are valid
+    if not os.path.isfile(log):
+        raise FileNotFoundError(f"log file {log} does not exist")
+    if log_type == "CAN":
+        if not dbc:
+            raise ValueError("DBC file must be provided for CAN log type")
+        if not os.path.isfile(dbc):
+            raise FileNotFoundError(f"DBC file {dbc} does not exist")
+
+    data_log = DataLog()
+    if log_type == "MCAP":
+        print("Extracting data from MCAP log...")
+        data_log.from_mcap_log(log)
+    else:
+        print("Loading log...")
+        with open(log, "r") as file:
+            lines = file.readlines()
+        if log_type == "CAN":
+            if not dbc:
+                raise ValueError("DBC file must be provided for CAN log type")
+            if not os.path.isfile(dbc):
+                raise FileNotFoundError(f"DBC file {dbc} does not exist")
+            print("Loading DBC...")
+            can_db = cantools.db.load_file(dbc)
+            print("Extracting data...")
+            data_log.from_can_log(lines, can_db)
+        elif log_type == "CSV":
+            print("Extracting data...")
+            data_log.from_csv_log(lines)
+        elif log_type == "ACCESSPORT":
+            print("Extracting data...")
+            data_log.from_accessport_log(lines)
+
+    if not data_log.channels:
+        raise RuntimeError("Failed to find any channels in log data")
+
+    print("Parsed %.1fs log with %s channels:" % (data_log.duration(), len(data_log.channels)))
+    for channel_name, channel in data_log.channels.items():
+        print("\t%s" % channel)
+
+    data_log.resample(frequency)
+    print("Converting to MoTeC log...")
+
+    motec_log = MotecLog()
+    motec_log.driver = driver
+    motec_log.vehicle_id = vehicle_id
+    motec_log.vehicle_weight = vehicle_weight
+    motec_log.vehicle_type = vehicle_type
+    motec_log.vehicle_comment = vehicle_comment
+    motec_log.venue_name = venue_name
+    motec_log.event_name = event_name
+    motec_log.event_session = event_session
+    motec_log.long_comment = long_comment
+    motec_log.short_comment = short_comment
+
+    motec_log.initialize()
+    motec_log.add_all_channels(data_log)
+
+    print("Saving MoTeC log...")
+    if output:
+        ld_filename = os.path.splitext(output)[0] + ".ld"
+    else:
+        candump_dir, candump_filename = os.path.split(log)
+        candump_filename = os.path.splitext(candump_filename)[0]
+        ld_filename = os.path.join(candump_dir, candump_filename + ".ld")
+
+    output_dir = os.path.dirname(ld_filename)
+    if output_dir and not os.path.isdir(output_dir):
+        print(f"Directory '{output_dir}' does not exist, will create it")
+        os.makedirs(output_dir)
+
+    motec_log.write(ld_filename)
+    print("Done!")
+    return ld_filename
+
+def main():
     parser = argparse.ArgumentParser(description=DESCRIPTION, epilog=EPILOG)
     parser.add_argument("log", type=str, help="Path to logfile")
     parser.add_argument("log_type", type=str, help="Type of log to process", \
         choices=["CAN", "CSV", "ACCESSPORT", "MCAP"])
-
-    parser.add_argument("--output", type=str, \
-        help="Name of output file, defaults to the same filename as 'log'")
-    parser.add_argument("--frequency", type=float, default=20.0, \
-        help="Fixed frequency to resample all channels at")
+    parser.add_argument("--output", type=str, help="Name of output file, defaults to the same filename as 'log'")
+    parser.add_argument("--frequency", type=float, default=20.0, help="Fixed frequency to resample all channels at")
     parser.add_argument("--dbc", type=str, help="Path to DBC file, required if log type CAN")
-
     parser.add_argument("--driver", type=str, default="", help="Motec log metadata field")
     parser.add_argument("--vehicle_id", type=str, default="", help="Motec log metadata field")
     parser.add_argument("--vehicle_weight", type=int, default=0, help="Motec log metadata field")
@@ -46,98 +140,23 @@ if __name__ == '__main__':
     parser.add_argument("--long_comment", type=str, default="", help="Motec log metadata field")
     parser.add_argument("--short_comment", type=str, default="", help="Motec log metadata field")
     args = parser.parse_args()
+    generate_motec_log(
+        log=args.log,
+        log_type=args.log_type,
+        output=args.output,
+        frequency=args.frequency,
+        dbc=args.dbc,
+        driver=args.driver,
+        vehicle_id=args.vehicle_id,
+        vehicle_weight=args.vehicle_weight,
+        vehicle_type=args.vehicle_type,
+        vehicle_comment=args.vehicle_comment,
+        venue_name=args.venue_name,
+        event_name=args.event_name,
+        event_session=args.event_session,
+        long_comment=args.long_comment,
+        short_comment=args.short_comment
+    )
 
-    if args.log:
-        args.log = os.path.expanduser(args.log)
-    if args.dbc:
-        args.dbc = os.path.expanduser(args.dbc)
-    if args.output:
-        args.output = os.path.expanduser(args.output)
-
-    # Make sure our input files are valid
-    if not os.path.isfile(args.log):
-        print("ERROR: log file %s does not exist" % args.log)
-        exit(1)
-
-    if args.log_type == "CAN" and not os.path.isfile(args.dbc):
-        print("ERROR: DBC file %s does not exist" % args.dbc)
-        exit(1)
-
-    data_log = DataLog()
-
-    # If its mcap just load it and rip cuz we can
-    if args.log_type == "MCAP":
-        print("Extracting data from MCAP log...")
-        data_log.from_mcap_log(args.log)
-    else:
-        # if its a lame format we gotta read the lines right here
-        print("Loading log...")
-        with open(args.log, "r") as file:
-            lines = file.readlines()
-
-        # Create our data log from the input data
-
-        if args.log_type == "CAN":
-            if not os.path.isfile(args.dbc):
-                print("ERROR: DBC file %s does not exist" % args.dbc)
-                exit(1)
-
-            # Load the databse and log file
-            print("Loading DBC...")
-            can_db = cantools.db.load_file(args.dbc)
-
-            print("Extracting data...")
-            data_log.from_can_log(lines, can_db)
-        elif args.log_type == "CSV":
-            print("Extracting data...")
-            data_log.from_csv_log(lines)
-        elif args.log_type == "ACCESSPORT":
-            print("Extracting data...")
-            data_log.from_accessport_log(lines)
-
-    if not data_log.channels:
-        print("ERROR: Failed to find any channels in log data")
-        exit(1)
-
-    print("Parsed %.1fs log with %s channels:" % (data_log.duration(), len(data_log.channels)))
-    for channel_name, channel in data_log.channels.items():
-        print("\t%s" % channel)
-
-    # Resample all the channels to occur at a fixed frequency. We must do this because the data in
-    # motec log expects a constant sample rate, it does not associate a timestamp to each individual
-    # message in a channel.
-    data_log.resample(args.frequency)
-
-    print("Converting to MoTeC log...")
-
-    motec_log = MotecLog()
-    motec_log.driver = args.driver
-    motec_log.vehicle_id = args.vehicle_id
-    motec_log.vehicle_weight = args.vehicle_weight
-    motec_log.vehicle_type = args.vehicle_type
-    motec_log.vehicle_comment = args.vehicle_comment
-    motec_log.venue_name = args.venue_name
-    motec_log.event_name = args.event_name
-    motec_log.event_session = args.event_session
-    motec_log.long_comment = args.long_comment
-    motec_log.short_comment = args.short_comment
-
-    motec_log.initialize()
-    motec_log.add_all_channels(data_log)
-
-    print("Saving MoTeC log...")
-    if args.output:
-        ld_filename = os.path.splitext(args.output)[0] + ".ld"
-    else:
-        # Copy the path and name from the source file, but change the extension
-        candump_dir, candump_filename = os.path.split(args.log)
-        candump_filename = os.path.splitext(candump_filename)[0]
-        ld_filename = os.path.join(candump_dir, candump_filename + ".ld")
-
-    output_dir = os.path.dirname(ld_filename)
-    if output_dir and not os.path.isdir(output_dir):
-        print("Directory '%s' does not exist, will create it" % output_dir)
-        os.makedirs(output_dir)
-
-    motec_log.write(ld_filename)
-    print("Done!")
+if __name__ == '__main__':
+    main()
