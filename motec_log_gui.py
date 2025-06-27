@@ -212,7 +212,7 @@ class MotecLogGUI(tk.Tk):
         add_tooltip(freq_entry, "Sample frequency for output log.")
         row += 1
 
-        self.status = tk.Label(container, text="", font=("PMingLiU-ExtB", 12, "italic"))
+        self.status = tk.Label(container, text="", font=("PMingLiU-ExtB", 12, "italic"), wraplength=500, justify="left")
         self.status.grid(row=row, column=0, columnspan=3, sticky="ew", pady=8)
         row += 1
 

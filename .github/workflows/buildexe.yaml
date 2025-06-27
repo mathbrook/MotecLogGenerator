@@ -83,14 +83,15 @@ jobs:
         id: archive
         run: |
           uncompressed_size=$(du -sh motec_log_gui.dist | cut -f1)
+          version="${{ github.ref_name }}"
           if [ "${{ matrix.os }}" = "windows-latest" ] || [ "${{ matrix.os }}" = "windows-11-arm" ]; then
-            7z a ${{ matrix.artifact_name }}.zip ./motec_log_gui.dist/*
-            archive_name="${{ matrix.artifact_name }}.zip"
-            compressed_size=$(du -sh $archive_name | cut -f1)
+            archive_name="${{ matrix.artifact_name }}-v${version}.zip"
+            7z a "$archive_name" ./motec_log_gui.dist/*
+            compressed_size=$(du -sh "$archive_name" | cut -f1)
           else
-            tar -czvf ${{ matrix.artifact_name }}.tar.gz -C motec_log_gui.dist .
-            archive_name="${{ matrix.artifact_name }}.tar.gz"
-            compressed_size=$(du -sh $archive_name | cut -f1)
+            archive_name="${{ matrix.artifact_name }}-v${version}.tar.gz"
+            tar -czvf "$archive_name" -C motec_log_gui.dist .
+            compressed_size=$(du -sh "$archive_name" | cut -f1)
           fi
           echo "archive_name=$archive_name" >> $GITHUB_OUTPUT
           echo "uncompressed_size=$uncompressed_size" >> $GITHUB_OUTPUT
@@ -100,7 +101,7 @@ jobs:
       - name: Add summary info
         continue-on-error: true
         run: |
-          echo "### Build Summary for ${{ matrix.artifact_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Summary for ${{ matrix.artifact_name }}-v${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- Uncompressed size: ${{ steps.archive.outputs.uncompressed_size }}" >> $GITHUB_STEP_SUMMARY
           echo "- Compressed artifact size: ${{ steps.archive.outputs.compressed_size }}" >> $GITHUB_STEP_SUMMARY
           echo "- Executable build time: ${{ steps.build_exe.outputs.build_time }} seconds" >> $GITHUB_STEP_SUMMARY
@@ -118,7 +119,7 @@ jobs:
       - name: upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
+          name: ${{ matrix.artifact_name }}-v${{ github.ref_name }}
           path: ${{ steps.archive.outputs.archive_name }}
 
       - name: upload release asset
